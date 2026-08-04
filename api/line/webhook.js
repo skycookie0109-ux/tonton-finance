@@ -137,15 +137,21 @@ async function handleTextMessage(event) {
   }
 }
 
-export default async function handler(request) {
-  if (request.method !== "POST") {
-    // 讓瀏覽器直接開這個網址時有東西看，方便確認函式有活著
-    return new Response("豚豚的 LINE webhook 在這裡 🦛", {
-      status: 200,
-      headers: { "content-type": "text/plain; charset=utf-8" },
-    });
-  }
+// 這裡刻意匯出具名的 HTTP 方法，而不是 export default。
+// Vercel 的 /api 函式把 export default 當成傳統的 (req, res) 簽章，
+// 回傳值會被直接忽略、請求就一直掛著直到逾時。
+// 具名匯出才會走 Web 版的 Request/Response——而我們需要 Web 版，
+// 因為驗簽必須拿到未經解析的原始 body。
 
+/** 讓瀏覽器直接開這個網址時有東西看，方便確認函式活著。 */
+export function GET() {
+  return new Response("豚豚的 LINE webhook 在這裡 🦛", {
+    status: 200,
+    headers: { "content-type": "text/plain; charset=utf-8" },
+  });
+}
+
+export async function POST(request) {
   const rawBody = await request.text();
   const signature = request.headers.get("x-line-signature");
 
