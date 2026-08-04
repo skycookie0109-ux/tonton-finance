@@ -1,0 +1,10 @@
+{
+  "name": "tonton-finance",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "豚豚記帳 — 懶人理財，豚豚主動找妳",
+  "engines": {
+    "node": ">=20"
+  }
+}
