@@ -613,33 +613,9 @@
 
       <!-- ══ 目標 ══ -->
       <section class="view" id="view-goal">
-        <div class="card goal">
-          <div class="top">
-            <div class="ico">🗼</div>
-            <div class="grow">
-              <h3>東京旅遊基金</h3>
-              <div class="meta num">NT$45,000 / NT$80,000 · 已存 56%</div>
-            </div>
-            <span class="chip bluec">12月達成</span>
-          </div>
-          <div class="bar"><i style="width:56%"></i></div>
-          <p class="gentle" data-tpl="每個月存 NT$5,000，12 月就能出發了 🎌 {n}陪妳一起存！"></p>
-        </div>
+        <div id="goalList" style="display:flex;flex-direction:column;gap:12px"></div>
 
-        <div class="card goal bluebar">
-          <div class="top">
-            <div class="ico">🛟</div>
-            <div class="grow">
-              <h3>緊急備用金</h3>
-              <div class="meta num">NT$120,000 / NT$150,000 · 已存 80%</div>
-            </div>
-            <span class="chip down">很安心</span>
-          </div>
-          <div class="bar"><i style="width:80%"></i></div>
-          <p class="gentle">快完成了！有這筆錢在，遇到什麼事都不怕 💪</p>
-        </div>
-
-        <button class="dashed" data-toast="正式版就能新增目標囉，先想想要去哪玩 ✈️">＋ 新增一個目標</button>
+        <button class="dashed" id="addGoalBtn">＋ 新增一個目標</button>
 
         <div class="card speech">
           <svg aria-hidden="true"><use data-char href="#char-capy"/></svg>
@@ -845,6 +821,26 @@
       </div>
     </div>
 
+    <!-- 新增目標 -->
+    <div class="sheet" id="sheet-goal" role="dialog" aria-label="新增目標">
+      <div class="grab"></div>
+      <h3>新增一個目標 🎯</h3>
+      <div class="inner frm">
+        <p class="hintline" style="margin-top:2px">想去哪、想買什麼，寫下來就會慢慢靠近 ✨</p>
+        <label for="glTitle">目標名稱</label>
+        <input id="glTitle" placeholder="例：東京旅遊基金" maxlength="20">
+        <div class="two">
+          <div><label for="glTarget">要存多少</label><input id="glTarget" inputmode="decimal" placeholder="80000"></div>
+          <div><label for="glSaved">已經存了</label><input id="glSaved" inputmode="decimal" placeholder="0"></div>
+        </div>
+        <label for="glEmo">選一個圖示</label>
+        <div class="uchips" id="glEmoChips"></div>
+        <label for="glDue">目標日期（選填）</label>
+        <input id="glDue" type="date">
+        <button class="save" id="goalSave">建立目標 🎯</button>
+      </div>
+    </div>
+
     <!-- 存放單位 -->
     <div class="sheet" id="sheet-units" role="dialog" aria-label="存放單位管理">
       <div class="grab"></div>
@@ -892,6 +888,7 @@
     <input id="gatePass" type="password" placeholder="密碼" autocomplete="current-password">
     <button class="go" id="gateGo">登入</button>
     <p class="gate-err" id="gateErr"></p>
+    <button class="gate-demo" id="gateSwap">還沒有帳號？註冊一個 ›</button>
     <button class="gate-demo" id="gateDemo">先看看示範資料 ›</button>
   </div>
 </div>
@@ -1067,6 +1064,10 @@
     live:false, userId:null, unitIdByName:{},
     hide:false, mode:"exp", filter:"全部", sort:"mv", groupBy:"mkt", range:30, noPeek:false,
     cash:126000, monthBudget:45000,
+    goals:[
+      { id:nid(), title:"東京旅遊基金", emo:"🗼", target:80000, saved:45000, due:"2026-12-31" },
+      { id:nid(), title:"緊急備用金", emo:"🛟", target:150000, saved:120000, due:null }
+    ],
     units:["國泰證券","富邦證券","Firstrade","幣安 Binance","冷錢包","台新銀行"],
     quick:[
       {emo:"🍱", cat:"餐點", label:"早餐", amt:60},
@@ -1324,18 +1325,89 @@
     });
   }
 
+  /* ═══ 目標 ═══ */
+  var GOAL_EMOS = ["🎯","🗼","🛟","✈️","🏠","💍","🎓","🚗","💻","🎁","🐱","🌈"];
+  function renderGoals(){
+    var box = $("#goalList"); box.innerHTML = "";
+    if (!state.goals.length){
+      box.innerHTML = '<p class="empty" style="padding:26px 0">還沒有目標。<br>想去哪玩、想買什麼？寫下來就會慢慢靠近 ✨</p>';
+      return;
+    }
+    state.goals.forEach(function(g, i){
+      var p = g.target > 0 ? Math.min(100, g.saved / g.target * 100) : 0;
+      var card = document.createElement("div");
+      card.className = "card goal" + (i % 2 ? " bluebar" : "");
+      var chip = p >= 100 ? '<span class="chip down">達成了 🎉</span>'
+        : g.due ? '<span class="chip bluec">' + (s2d(g.due).getMonth()+1) + '月目標</span>' : "";
+      card.innerHTML =
+        '<div class="top"><div class="ico">' + g.emo + '</div>' +
+        '<div class="grow"><h3></h3><div class="meta num">' + money(g.saved) + ' / ' + money(g.target) +
+        ' · 已存 ' + p.toFixed(0) + '%</div></div>' + chip + '</div>' +
+        '<div class="bar"><i style="width:' + p.toFixed(1) + '%"></i></div>' +
+        '<p class="gentle"></p>';
+      card.querySelector("h3").textContent = g.title;
+      card.querySelector(".gentle").textContent =
+        p >= 100 ? "存到了！好好犒賞自己一下 🎉"
+        : p >= 80 ? "快完成了，再一下下就到了 💪"
+        : p >= 40 ? "已經走一半囉，" + N() + "陪妳一起存 🧡"
+        : "才剛開始，慢慢來就好 🌱";
+      box.appendChild(card);
+    });
+  }
+  $("#addGoalBtn").addEventListener("click", function(){
+    $("#glTitle").value = ""; $("#glTarget").value = ""; $("#glSaved").value = ""; $("#glDue").value = "";
+    glEmo = "🎯";
+    renderGoalEmos();
+    openSheet("#sheet-goal");
+  });
+  var glEmo = "🎯";
+  function renderGoalEmos(){
+    var box = $("#glEmoChips"); box.innerHTML = "";
+    GOAL_EMOS.forEach(function(e){
+      var b = document.createElement("button");
+      b.className = "uchip" + (e === glEmo ? " on" : "");
+      b.textContent = e;
+      b.style.fontSize = "18px";
+      b.addEventListener("click", function(){ glEmo = e; renderGoalEmos(); });
+      box.appendChild(b);
+    });
+  }
+  $("#goalSave").addEventListener("click", function(){
+    var title = $("#glTitle").value.trim();
+    var target = parseFloat($("#glTarget").value);
+    var saved = parseFloat($("#glSaved").value) || 0;
+    if (!title || !(target > 0)){ toast("名稱和目標金額要填一下下 🙏"); return; }
+    var g = { id:nid(), title:title, emo:glEmo, target:target, saved:saved, due:$("#glDue").value || null };
+    state.goals.push(g);
+    persist(async function(){ g.id = await window.TT.createGoal(g, state.userId); });
+    closeSheets(); renderGoals();
+    toast("目標建好了！" + glEmo + " 一起加油 🧡");
+  });
+
   /* ═══ 資產曲線 ═══ */
   var curvePts = [];
   function renderCurve(total){
-    var n = Math.min(state.range, SNAP_F.length);
-    var slice = SNAP_F.slice(SNAP_F.length - n);
-    var vals = slice.map(function(f){ return total * f; });
+    // 有真實快照就用真的；還沒累積到快照時（新帳號、或排程還沒跑過），
+    // 退回用模擬曲線只是為了讓畫面不空，數字仍以今天的總資產為準
+    var vals, dates;
+    if (state.snapshots && state.snapshots.length > 1){
+      var take = state.snapshots.slice(-state.range);
+      vals = take.map(function(s){ return s.v; });
+      dates = take.map(function(s){ return s.d; });
+      // 最後一點永遠對齊此刻算出來的總資產，不然畫面跟數字會打架
+      vals[vals.length - 1] = total;
+    } else {
+      var n = Math.min(state.range, SNAP_F.length);
+      var slice = SNAP_F.slice(SNAP_F.length - n);
+      vals = slice.map(function(f){ return total * f; });
+      dates = null;
+    }
     var W = 320, H = 64, pad = 4;
     var mn = Math.min.apply(null, vals), mx = Math.max.apply(null, vals);
     curvePts = vals.map(function(v, i){
       return { x: pad + i * (W - 2*pad) / (vals.length - 1 || 1),
                y: H - 7 - (v - mn) / (mx - mn || 1) * (H - 18),
-               v: v, date: shiftDay(TODAY, -(vals.length - 1 - i)) };
+               v: v, date: dates ? dates[i] : shiftDay(TODAY, -(vals.length - 1 - i)) };
     });
     var line = curvePts.map(function(p,i){ return (i?"L":"M") + p.x.toFixed(1) + " " + p.y.toFixed(1); }).join("");
     var area = line + "L" + (W-pad) + " " + (H-2) + "L" + pad + " " + (H-2) + "Z";
@@ -1778,7 +1850,7 @@
       if (ds > TODAY) ds = TODAY;
       var exists = state.tx.some(function(t){ return t.src === "auto" && t.note.indexOf(s.name) === 0 && monthOf(t.date) === monthOf(ds); });
       if (exists) return;
-      var t = addTxLocal({ id:nid(), date:ds, time:"00:05", cat:s.cat, emo:s.emo, note:s.name + "（自動）", amt:s.amt, income:false, src:"auto" });
+      var t = addTxLocal({ id:nid(), date:ds, time:"00:05", cat:s.cat, emo:s.emo || "🔁", note:s.name + "（自動）", amt:s.amt, income:false, src:"auto" });
       added.push(t);
     });
     renderAll();
@@ -1802,7 +1874,9 @@
         '<button class="ub" aria-label="刪除">🗑️</button>';
       r.querySelector(".un").textContent = q.label + " · " + q.cat;
       r.querySelector(".ub").addEventListener("click", function(){
-        state.quick.splice(i,1); renderQuickList(); renderQuickChips();
+        var gone = state.quick.splice(i,1)[0];
+        persist(function(){ return gone.id ? window.TT.removeQuick(gone.id) : null; });
+        renderQuickList(); renderQuickChips();
       });
       box.appendChild(r);
     });
@@ -1814,7 +1888,9 @@
     if (!nm || !(am > 0)){ toast("名稱和金額都要填一下下 🙏"); return; }
     var p = parseSentence(nm + am);
     var cat = p.length ? p[0].cat : "其他";
-    state.quick.push({ emo:CAT_EMO[cat] || "✨", cat:cat, label:nm, amt:am });
+    var q = { id:nid(), emo:CAT_EMO[cat] || "✨", cat:cat, label:nm, amt:am };
+    state.quick.push(q);
+    persist(async function(){ q.id = await window.TT.createQuick(q, state.userId); });
     $("#qName").value = ""; $("#qAmt").value = "";
     renderQuickList(); renderQuickChips();
     toast("加好了：" + nm + " ⚡");
@@ -2188,6 +2264,7 @@
   function renderAll(){
     renderHome();
     renderInvest();
+    renderGoals();
     $("#profileStat").innerHTML = '已經一起記帳 <b class="num">' + (daysBetween("2026-04-28", TODAY)) +
       '</b> 天，記下 <b class="num">' + state.tx.length + '</b> 筆 🧡';
   }
@@ -2246,6 +2323,12 @@
     state.holdings = d.holdings;
     state.trades = d.trades;
     state.divs = d.divs;
+    // 這幾項原本是示範值，登入後一律換成她自己的（沒有就是空的，不留假資料）
+    state.quick = d.quick;
+    state.subs = d.subs;
+    state.goals = d.goals;
+    state.snapshots = d.snapshots;
+    state.cash = d.profile ? Number(d.profile.cash_balance || 0) : 0;
     // 本地暫時 id 要跳到所有現有 id 之上，否則新記的一筆可能跟資料庫既有的
     // 某筆撞號，導致編輯或刪除時改到錯的對象
     var maxId = 0;
@@ -2272,17 +2355,46 @@
     hideGate();
   }
 
+  var gateMode = "login";
+  $("#gateSwap").addEventListener("click", function(){
+    gateMode = gateMode === "login" ? "signup" : "login";
+    $("#gateGo").textContent = gateMode === "login" ? "登入" : "建立帳號";
+    this.textContent = gateMode === "login" ? "還沒有帳號？註冊一個 ›" : "已經有帳號了？回去登入 ›";
+    $("#gatePass").setAttribute("autocomplete", gateMode === "login" ? "current-password" : "new-password");
+    $("#gateErr").textContent = "";
+  });
+
   $("#gateGo").addEventListener("click", async function(){
     var btn = this;
+    var email = $("#gateEmail").value.trim(), pass = $("#gatePass").value;
+    if (!email || !pass){ $("#gateErr").textContent = "信箱和密碼都要填喔 🙈"; return; }
+    if (gateMode === "signup" && pass.length < 6){
+      $("#gateErr").textContent = "密碼至少要 6 個字，安全一點 🔐"; return;
+    }
     btn.disabled = true;
     $("#gateErr").textContent = "";
     try {
-      await window.TT.login($("#gateEmail").value, $("#gatePass").value);
+      if (gateMode === "signup"){
+        var r = await window.TT.signup(email, pass);
+        if (r.needsConfirm){
+          $("#gateErr").style.color = "var(--ink2)";
+          $("#gateErr").textContent = "帳號建好了！請到信箱點一下確認信，再回來登入 📮";
+          gateMode = "login";
+          $("#gateGo").textContent = "登入";
+          $("#gateSwap").textContent = "還沒有帳號？註冊一個 ›";
+          return;
+        }
+      } else {
+        await window.TT.login(email, pass);
+      }
       await loadRemote();
-      toast("歡迎回來 🧡");
+      toast(gateMode === "signup" ? "歡迎！{n}開始陪妳記帳 🧡" : "歡迎回來 🧡");
     } catch (err){
-      $("#gateErr").textContent = /Invalid login/i.test(err.message)
-        ? "信箱或密碼不對，再試一次 🙈" : err.message;
+      $("#gateErr").style.color = "var(--up)";
+      $("#gateErr").textContent =
+        /Invalid login/i.test(err.message) ? "信箱或密碼不對，再試一次 🙈"
+        : /already registered/i.test(err.message) ? "這個信箱已經註冊過了，直接登入吧 👋"
+        : err.message;
     } finally {
       btn.disabled = false;
     }

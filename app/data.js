@@ -76,6 +76,22 @@
     return session;
   }
 
+  /**
+   * 註冊。回傳 { needsConfirm: true } 代表 Supabase 設定了要收信驗證，
+   * 這時候還不能直接進 App，得請她先去點信裡的連結。
+   */
+  async function signup(email, password) {
+    var json = await auth("signup", {
+      email: (email || "").trim(),
+      password: password || "",
+    });
+    if (json.access_token) {
+      saveSession(sessionFromAuth(json));
+      return { needsConfirm: false };
+    }
+    return { needsConfirm: true };
+  }
+
   async function refresh() {
     if (!session || !session.refresh_token) return null;
     try {
@@ -196,6 +212,10 @@
       rest("holdings?select=*&order=id.asc"),
       rest("trades?select=*&order=traded_on.desc"),
       rest("dividends?select=*&order=paid_on.desc"),
+      rest("quick_actions?select=*&order=sort_order.asc,id.asc"),
+      rest("subscriptions?select=*&active=eq.true&order=day_of_month.asc"),
+      rest("goals?select=*&order=id.asc"),
+      rest("asset_snapshots?select=taken_on,total&order=taken_on.asc&limit=400"),
     ]);
     var profile = results[0][0] || null;
     var unitRows = results[2];
@@ -229,6 +249,27 @@
           mkt: MARKET_TO_UI[r.market] || "台股",
           ccy: r.currency || "TWD", amt: Number(r.amount),
         };
+      }),
+      quick: results[6].map(function (r) {
+        return {
+          id: r.id, label: r.label, cat: r.category,
+          emo: r.emoji || "✨", amt: Number(r.amount),
+        };
+      }),
+      subs: results[7].map(function (r) {
+        return {
+          id: r.id, name: r.name, cat: r.category, emo: r.emoji || "🔁",
+          amt: Number(r.amount), day: r.day_of_month,
+        };
+      }),
+      goals: results[8].map(function (r) {
+        return {
+          id: r.id, title: r.title, emo: r.emoji || "🎯",
+          target: Number(r.target), saved: Number(r.saved), due: r.due_on,
+        };
+      }),
+      snapshots: results[9].map(function (r) {
+        return { d: r.taken_on, v: Number(r.total) };
       }),
     };
   }
@@ -288,9 +329,46 @@
     return rest("profiles?id=eq." + userId, { method: "PATCH", body: patch, prefer: "return=minimal" });
   }
 
+  async function createQuick(q, userId) {
+    var rows = await rest("quick_actions", {
+      method: "POST",
+      body: { user_id: userId, label: q.label, category: q.cat, emoji: q.emo, amount: q.amt },
+    });
+    return rows[0].id;
+  }
+  function removeQuick(id) {
+    return rest("quick_actions?id=eq." + id, { method: "DELETE", prefer: "return=minimal" });
+  }
+  async function createGoal(g, userId) {
+    var rows = await rest("goals", {
+      method: "POST",
+      body: { user_id: userId, title: g.title, emoji: g.emo, target: g.target, saved: g.saved || 0, due_on: g.due || null },
+    });
+    return rows[0].id;
+  }
+  function updateGoal(id, patch) {
+    return rest("goals?id=eq." + id, { method: "PATCH", body: patch, prefer: "return=minimal" });
+  }
+  function removeGoal(id) {
+    return rest("goals?id=eq." + id, { method: "DELETE", prefer: "return=minimal" });
+  }
+  async function createSub(s, userId) {
+    var rows = await rest("subscriptions", {
+      method: "POST",
+      body: { user_id: userId, name: s.name, category: s.cat, emoji: s.emo, amount: s.amt, day_of_month: s.day },
+    });
+    return rows[0].id;
+  }
+  function removeSub(id) {
+    return rest("subscriptions?id=eq." + id, { method: "DELETE", prefer: "return=minimal" });
+  }
+
   window.TT = {
     config: config, loadSession: loadSession, isLoggedIn: isLoggedIn,
-    login: login, logout: logout,
+    login: login, signup: signup, logout: logout,
+    createQuick: createQuick, removeQuick: removeQuick,
+    createGoal: createGoal, updateGoal: updateGoal, removeGoal: removeGoal,
+    createSub: createSub, removeSub: removeSub,
     loadAll: loadAll,
     createTx: createTx, updateTx: updateTx, removeTx: removeTx,
     createHolding: createHolding, updateHolding: updateHolding, removeHolding: removeHolding,
