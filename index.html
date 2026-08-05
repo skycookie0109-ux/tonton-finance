@@ -1015,8 +1015,20 @@
 
   /* ═══ 基礎設定與工具 ═══ */
   var FX = { USD: 31.2, TWD: 1 };
-  var TODAY = "2026-07-24";                    // 原型固定示範日期
+  // 示範模式停在一個固定日期，種子資料才有意義；
+  // 登入之後 setToday() 會把它換成真正的今天（台北時區）。
+  var TODAY = "2026-07-24";
   var TODAY_D = new Date(2026, 6, 24);
+  function taipeiToday(){
+    return new Intl.DateTimeFormat("en-CA", {
+      timeZone:"Asia/Taipei", year:"numeric", month:"2-digit", day:"2-digit"
+    }).format(new Date());
+  }
+  function setToday(dateStr){
+    TODAY = dateStr;
+    TODAY_D = s2d(dateStr);
+    renderGreeting();
+  }
   var TW_FEE = 0.001425;                        // 台股手續費率
   var uid = 0; function nid(){ return ++uid; }
 
@@ -1219,12 +1231,13 @@
   });
 
   /* ═══ 問候語 ═══ */
-  (function(){
+  function renderGreeting(){
     var h = new Date().getHours();
     $("#greet").textContent = h < 5 ? "夜深了 🌙" : h < 11 ? "早安呀 ☀️" : h < 18 ? "午安～ 🍵" : "晚安呀 🌛";
     var d = TODAY_D;
     $("#dateline").textContent = (d.getMonth()+1) + "月" + d.getDate() + "日 週" + WD[d.getDay()] + " · 今天也慢慢變有錢 🧡";
-  })();
+  }
+  renderGreeting();
 
   /* ═══ 首頁 ═══ */
   function renderHome(){
@@ -1233,9 +1246,19 @@
     $("#assetSplit").textContent = "現金 " + money(state.cash) + " · 投資 " + money(inv.mv);
 
     var dayChg = $("#dayChg");
+    var snaps = state.snapshots || [];
     if (state.noPeek){
       dayChg.className = "chip soft";
       dayChg.textContent = "🍵 不看盤模式";
+    } else if (state.live && snaps.length < 1){
+      // 沒有昨天的快照就算不出「今天變化多少」，不要拿模擬數字充數
+      dayChg.className = "chip soft";
+      dayChg.textContent = "🌱 剛開始記錄";
+    } else if (state.live){
+      var prevSnap = snaps[snaps.length - 1].v;
+      var d2 = total - prevSnap, r2 = prevSnap ? d2 / prevSnap : 0;
+      dayChg.className = "chip num " + (d2 >= 0 ? "up" : "down");
+      dayChg.textContent = (d2 >= 0 ? "▲ " : "▼ ") + (state.hide ? "🍊🍊" : money(Math.abs(d2))) + " (" + pct(r2) + ")";
     } else {
       var prev = total * SNAP_F[SNAP_F.length - 2] / SNAP_F[SNAP_F.length - 1];
       var diff = total - prev, rr = prev ? diff / prev : 0;
@@ -1396,6 +1419,11 @@
       dates = take.map(function(s){ return s.d; });
       // 最後一點永遠對齊此刻算出來的總資產，不然畫面跟數字會打架
       vals[vals.length - 1] = total;
+    } else if (state.live){
+      // 登入了但還沒有快照（排程還沒跑過）。畫一條平的，
+      // 絕不用模擬曲線假裝她賺了多少——那是編造出來的數字
+      vals = [total, total];
+      dates = [TODAY, TODAY];
     } else {
       var n = Math.min(state.range, SNAP_F.length);
       var slice = SNAP_F.slice(SNAP_F.length - n);
@@ -1417,10 +1445,16 @@
       '<path d="' + line + '" fill="none" stroke="var(--spark)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>' +
       '<line id="sparkX" x1="0" x2="0" y1="4" y2="' + (H-2) + '" stroke="var(--ink3)" stroke-width="1" stroke-dasharray="2 3" opacity="0"/>' +
       '<circle id="sparkDot" cx="' + last.x + '" cy="' + last.y + '" r="3.6" fill="var(--spark)" stroke="var(--card)" stroke-width="2"/>';
-    var first = curvePts[0].v, gain = last.v - first;
-    $("#sparkFrom").textContent = mdLabel(curvePts[0].date) + " 起";
-    $("#sparkGain").textContent = state.hide ? "🍊🍊"
-      : (gain >= 0 ? "▲ " : "▼ ") + money(Math.abs(gain)) + "（" + pct(first ? gain/first : 0) + "）";
+    var noHistory = state.live && !(state.snapshots && state.snapshots.length > 1);
+    if (noHistory){
+      $("#sparkFrom").textContent = "資產紀錄";
+      $("#sparkGain").textContent = "從今天開始累積 🌱";
+    } else {
+      var first = curvePts[0].v, gain = last.v - first;
+      $("#sparkFrom").textContent = mdLabel(curvePts[0].date) + " 起";
+      $("#sparkGain").textContent = state.hide ? "🍊🍊"
+        : (gain >= 0 ? "▲ " : "▼ ") + money(Math.abs(gain)) + "（" + pct(first ? gain/first : 0) + "）";
+    }
     $("#sparkGain").style.color = "var(--ink2)";
   }
   (function(){
@@ -2316,6 +2350,10 @@
   async function loadRemote(){
     var d = await window.TT.loadAll();
     state.live = true;
+    // 示範模式停在 7/24，真資料要用真正的今天，否則今天的紀錄、
+    // 本月統計、連續天數全都會對不上
+    setToday(taipeiToday());
+    $$(".demo-tag").forEach(function(el){ el.hidden = true; });
     state.userId = d.userId;
     state.unitIdByName = d.unitIdByName;
     state.tx = d.tx;
