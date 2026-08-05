@@ -13,13 +13,23 @@ import { parseSentence, summarize, todayInTaipei } from "../_lib/parse.js";
 
 const LINE_REPLY_URL = "https://api.line.me/v2/bot/message/reply";
 
-// 結尾的斜線要拿掉。Supabase 後台複製出來的網址常常帶著它，
-// 接上 /rest/v1/... 就變成雙斜線，PostgREST 會回 PGRST125 說路徑無效。
-const SUPABASE_URL = (
-  process.env.SUPABASE_URL ||
-  process.env.NEXT_PUBLIC_SUPABASE_URL ||
-  ""
-).replace(/\/+$/, "");
+// 只取網域，把後面的路徑一律丟掉。
+// Supabase 後台不同區塊顯示的網址格式不一樣：有的是純網域、有的結尾帶斜線、
+// Data API 那塊顯示的還直接包含 /rest/v1。三種貼進來都要能用，
+// 否則接上 /rest/v1/... 會變成 //rest/v1 或 /rest/v1/rest/v1，
+// PostgREST 一律回 PGRST125 說路徑無效。
+function toOrigin(raw) {
+  const value = (raw || "").trim();
+  if (!value) return "";
+  try {
+    return new URL(value).origin;
+  } catch {
+    return value.replace(/\/+$/, "");
+  }
+}
+const SUPABASE_URL = toOrigin(
+  process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL
+);
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const CHANNEL_SECRET = process.env.LINE_CHANNEL_SECRET;
 const CHANNEL_TOKEN = process.env.LINE_CHANNEL_ACCESS_TOKEN;
