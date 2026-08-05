@@ -368,6 +368,26 @@
   .urow .ub{width:34px;height:34px;border-radius:11px;background:var(--card2);display:grid;place-items:center;font-size:14px;flex:none}
   .urow input{flex:1;background:var(--card2);border:0;border-radius:10px;padding:8px 11px;font-size:14px;min-width:0}
 
+  /* 登入畫面 */
+  .gate{position:fixed;inset:0;z-index:60;display:grid;place-items:center;padding:22px;
+    background:radial-gradient(700px 500px at 80% -10%, var(--stage-b), transparent 70%), var(--stage-a)}
+  .gate[hidden]{display:none}
+  .gate-card{width:min(360px,100%);background:var(--card);border:1px solid var(--line);
+    border-radius:26px;padding:28px 24px;box-shadow:var(--shadow);text-align:center}
+  .gate-card svg{width:78px;height:78px}
+  .gate-card h1{font-size:22px;font-weight:800;margin-top:6px}
+  .gate-card .sub{font-size:13px;color:var(--ink2);margin-top:5px;line-height:1.6}
+  .gate-card input{width:100%;margin-top:10px;background:var(--card2);border:0;
+    border-radius:14px;padding:13px 15px;font-size:15px}
+  .gate-card input::placeholder{color:var(--ink3)}
+  .gate-card .go{width:100%;margin-top:14px;border-radius:16px;padding:14px;
+    background:var(--btn-bg);color:var(--on-btn);font-size:15.5px;font-weight:800;
+    box-shadow:var(--fab-shadow);transition:transform .12s}
+  .gate-card .go:active{transform:scale(.97)}
+  .gate-card .go:disabled{opacity:.5;box-shadow:none}
+  .gate-err{font-size:13px;color:var(--up);min-height:19px;margin-top:9px;line-height:1.5}
+  .gate-demo{font-size:13px;font-weight:700;color:var(--ink2);padding:8px;margin-top:2px}
+
   .capy-bob{animation:bob 3.2s ease-in-out infinite}
   @keyframes bob{0%,100%{transform:translateY(0)}50%{transform:translateY(-3px)}}
   @media (prefers-reduced-motion: reduce){ *{animation:none!important;transition:none!important} }
@@ -648,6 +668,7 @@
           <button class="setrow" data-toast="手機、iPad、Mac 都會自動同步"><span class="emo">☁️</span><span class="lbl">跨裝置同步</span><span class="val">已同步</span><span class="chev">›</span></button>
           <button class="setrow" data-toast="打開 App 用 Face ID 保護小金庫"><span class="emo">🔐</span><span class="lbl">Face ID 鎖定</span><span class="val">開啟</span><span class="chev">›</span></button>
           <button class="setrow" data-toast="隨時可以把資料帶走，都是妳的"><span class="emo">📤</span><span class="lbl">匯出 CSV</span><span class="val"></span><span class="chev">›</span></button>
+          <button class="setrow" id="logoutRow" hidden><span class="emo">👋</span><span class="lbl">登出</span><span class="val"></span><span class="chev">›</span></button>
         </div>
         <p class="foot" data-tpl="{n}記帳 · 介面原型 v0.4 · 資料皆為示範"></p>
       </section>
@@ -859,9 +880,23 @@
     </div>
   </div>
 
-  <p class="stage-note" data-tpl="「{n}記帳」介面原型 v0.4 — 首頁可用一句話記帳（試試「早餐60 珍奶65」）或點常用快捷一秒記完；點任一筆可編輯或刪除；投資頁可依市場／存放單位看配置、排序、賣出結算；「更多」裡有主題換裝、訂閱自動入帳、不看盤模式。所有數字皆為示範資料。"></p>
+  <p class="stage-note" data-tpl="「{n}記帳」— 首頁可用一句話記帳（試試「早餐60 珍奶65」）或點常用快捷一秒記完；點任一筆可編輯或刪除；投資頁可依市場／存放單位看配置、排序、賣出結算；「更多」裡有主題換裝、訂閱自動入帳、不看盤模式。未登入時顯示的是示範資料。"></p>
 </div>
 
+<div class="gate" id="gate" hidden>
+  <div class="gate-card">
+    <svg class="capy-bob" aria-hidden="true"><use data-char href="#char-capy"/></svg>
+    <h1 data-tpl="{n}記帳"></h1>
+    <p class="sub">登入之後，看到的就是妳自己的帳囉 🧡</p>
+    <input id="gateEmail" type="email" placeholder="電子信箱" autocomplete="username" inputmode="email">
+    <input id="gatePass" type="password" placeholder="密碼" autocomplete="current-password">
+    <button class="go" id="gateGo">登入</button>
+    <p class="gate-err" id="gateErr"></p>
+    <button class="gate-demo" id="gateDemo">先看看示範資料 ›</button>
+  </div>
+</div>
+
+<script src="/app/data.js"></script>
 <script>
 (function(){
   "use strict";
@@ -1028,6 +1063,8 @@
   var INCOME_CATS = { "薪水":1, "獎金":1, "股息":1 };
 
   var state = {
+    // live=false 代表現在跑的是示範資料，任何寫入都不會送到雲端
+    live:false, userId:null, unitIdByName:{},
     hide:false, mode:"exp", filter:"全部", sort:"mv", groupBy:"mkt", range:30, noPeek:false,
     cash:126000, monthBudget:45000,
     units:["國泰證券","富邦證券","Firstrade","幣安 Binance","冷錢包","台新銀行"],
@@ -1278,11 +1315,10 @@
   }
   function quickRecord(i){
     var q = state.quick[i];
-    var t = { id:nid(), date:TODAY, time:"剛剛", cat:q.cat, emo:q.emo, note:q.label, amt:q.amt, income:false, src:"app" };
-    state.tx.push(t);
+    var t = addTxLocal({ id:nid(), date:TODAY, time:"剛剛", cat:q.cat, emo:q.emo, note:q.label, amt:q.amt, income:false, src:"app" });
     renderHome();
     toast("記好了！" + q.label + " " + money(q.amt) + " ⚡", function(){
-      state.tx = state.tx.filter(function(x){ return x.id !== t.id; });
+      removeTxLocal(t.id);
       renderHome();
       toast("已復原 🙆");
     });
@@ -1578,34 +1614,36 @@
     if (editId){
       var t = state.tx.find(function(x){ return x.id === editId; });
       t.amt = amt; t.cat = c[1]; t.emo = c[0]; t.note = note || c[1]; t.date = expDate; t.income = state.mode === "inc";
+      persist(async function(){
+        if (t._saving) await t._saving;
+        await window.TT.updateTx(t.id, t, state.userId);
+      });
       closeSheets(); renderAll(); toast("改好了 ✏️");
     } else {
-      var nt = { id:nid(), date:expDate, time: expDate === TODAY ? "剛剛" : "手動",
-                 cat:c[1], emo:c[0], note: note || c[1], amt:amt, income: state.mode === "inc", src:"app" };
-      state.tx.push(nt);
+      var nt = addTxLocal({ id:nid(), date:expDate, time: expDate === TODAY ? "剛剛" : "手動",
+                 cat:c[1], emo:c[0], note: note || c[1], amt:amt, income: state.mode === "inc", src:"app" });
       closeSheets(); renderAll();
       var P = ["記好了！{n}給妳一個讚 🧡","太棒了，今天也有好好記帳 ✨","收到收到～存進小本本了 📒","慢慢來，錢錢會跟上的 🐾"];
       toast(state.mode === "inc" ? "收入記好了，錢錢進來了 💰" : P[state.tx.length % P.length], function(){
-        state.tx = state.tx.filter(function(x){ return x.id !== nt.id; });
+        removeTxLocal(nt.id);
         renderAll(); toast("已復原 🙆");
       });
     }
   });
   $("#expDel").addEventListener("click", function(){
-    var gone = state.tx.find(function(x){ return x.id === editId; });
-    state.tx = state.tx.filter(function(x){ return x.id !== editId; });
+    var gone = removeTxLocal(editId);
     closeSheets(); renderAll();
-    toast("刪掉了 🗑️", function(){ state.tx.push(gone); renderAll(); toast("救回來了 🙆"); });
+    toast("刪掉了 🗑️", function(){ restoreTxLocal(gone); renderAll(); toast("救回來了 🙆"); });
   });
   $("#todayList").addEventListener("click", function(e){
     var b = e.target.closest("[data-tx]"); if (!b) return;
     openExp(state.tx.find(function(t){ return t.id === +b.dataset.tx; }));
   });
   $("#noSpendBtn").addEventListener("click", function(){
-    var t = { id:nid(), date:TODAY, time:"剛剛", cat:"其他", emo:"🙌", note:"今天沒花錢", amt:0, income:false, src:"app" };
-    state.tx.push(t); renderAll();
+    var t = addTxLocal({ id:nid(), date:TODAY, time:"剛剛", cat:"其他", emo:"🙌", note:"今天沒花錢", amt:0, income:false, src:"app" });
+    renderAll();
     toast("太厲害了！連續紀錄不中斷 🔥", function(){
-      state.tx = state.tx.filter(function(x){ return x.id !== t.id; });
+      removeTxLocal(t.id);
       renderAll();
     });
   });
@@ -1668,13 +1706,13 @@
   function commitParsed(list){
     var added = [];
     list.forEach(function(p){
-      var t = { id:nid(), date:p.date, time: p.date === TODAY ? "剛剛" : "手動",
-                cat:p.cat, emo:p.emo, note:p.note, amt:p.amt, income:p.income, src:"line" };
-      state.tx.push(t); added.push(t.id);
+      var t = addTxLocal({ id:nid(), date:p.date, time: p.date === TODAY ? "剛剛" : "手動",
+                cat:p.cat, emo:p.emo, note:p.note, amt:p.amt, income:p.income, src:"app" });
+      added.push(t);
     });
     renderAll();
     toast("記好了 " + list.length + " 筆！{n}都聽懂了 💬", function(){
-      state.tx = state.tx.filter(function(x){ return added.indexOf(x.id) < 0; });
+      added.forEach(function(t){ removeTxLocal(t.id); });
       renderAll(); toast("已復原 🙆");
     });
   }
@@ -1740,14 +1778,14 @@
       if (ds > TODAY) ds = TODAY;
       var exists = state.tx.some(function(t){ return t.src === "auto" && t.note.indexOf(s.name) === 0 && monthOf(t.date) === monthOf(ds); });
       if (exists) return;
-      var t = { id:nid(), date:ds, time:"00:05", cat:s.cat, emo:s.emo, note:s.name + "（自動）", amt:s.amt, income:false, src:"auto" };
-      state.tx.push(t); added.push(t.id);
+      var t = addTxLocal({ id:nid(), date:ds, time:"00:05", cat:s.cat, emo:s.emo, note:s.name + "（自動）", amt:s.amt, income:false, src:"auto" });
+      added.push(t);
     });
     renderAll();
     closeSheets();
     toast(added.length ? "自動記了 " + added.length + " 筆固定支出 🔁" : "這個月的都記過了，很乖 👌",
       added.length ? function(){
-        state.tx = state.tx.filter(function(x){ return added.indexOf(x.id) < 0; });
+        added.forEach(function(t){ removeTxLocal(t.id); });
         renderAll(); toast("已復原 🙆");
       } : null);
   });
@@ -1801,6 +1839,7 @@
         '<span class="tick">' + (key === pref.skin ? "使用中 ✓" : "") + '</span>';
       b.addEventListener("click", function(){
         pref.skin = key; applyTheme(); renderSkinGrid(); renderAll();
+        persist(function(){ return window.TT.updateProfile(state.userId, { skin: key }); });
         toast("換好囉！以後由" + SKINS[key].name + "陪妳記帳 🧡");
       });
       grid.appendChild(b);
@@ -1811,6 +1850,7 @@
     pref.mode = b.dataset.m;
     $$("#modeSeg button").forEach(function(x){ x.classList.toggle("on", x === b); });
     applyTheme(); renderSkinGrid();
+    persist(function(){ return window.TT.updateProfile(state.userId, { appearance: pref.mode }); });
   });
   $("#themeBtn").addEventListener("click", function(){
     $$("#modeSeg button").forEach(function(x){ x.classList.toggle("on", x.dataset.m === pref.mode); });
@@ -1823,6 +1863,7 @@
     this.classList.toggle("on", state.noPeek);
     this.setAttribute("aria-checked", String(state.noPeek));
     renderHome();
+    persist(function(){ return window.TT.updateProfile(state.userId, { no_peek: state.noPeek }); });
     toast(state.noPeek ? "好，平常不吵妳，週報再一起說 🍵" : "好，恢復每日提示 👀");
   });
 
@@ -1850,7 +1891,11 @@
     name = (name || "").trim();
     if (!name){ toast("先幫它取個名字 🙈"); return false; }
     if (state.units.indexOf(name) >= 0){ toast("這個單位已經有了 👌"); return false; }
-    state.units.push(name); return true;
+    state.units.push(name);
+    persist(async function(){
+      state.unitIdByName[name] = await window.TT.createUnit(name, state.userId);
+    });
+    return true;
   }
   $("#unitAddOk").addEventListener("click", function(){
     var v = $("#unitNew").value;
@@ -1875,6 +1920,9 @@
       btns[1].addEventListener("click", function(){
         state.units.splice(state.units.indexOf(u),1);
         if (selUnit === u) selUnit = state.units[0] || "";
+        var unitId = state.unitIdByName[u];
+        delete state.unitIdByName[u];
+        persist(function(){ return unitId ? window.TT.removeUnit(unitId) : null; });
         renderUnitManage(); toast("刪掉了～已記的帳不受影響 🙆");
       });
       list.appendChild(row);
@@ -1890,6 +1938,10 @@
       state.units[state.units.indexOf(oldName)] = neu;
       state.holdings.forEach(function(h){ if (h.unit === oldName) h.unit = neu; });
       if (selUnit === oldName) selUnit = neu;
+      var unitId = state.unitIdByName[oldName];
+      delete state.unitIdByName[oldName];
+      state.unitIdByName[neu] = unitId;
+      persist(function(){ return unitId ? window.TT.renameUnit(unitId, neu) : null; });
       renderUnitManage(); renderInvest(); toast("改好了：" + neu + " ✏️");
     });
   }
@@ -1940,6 +1992,7 @@
       exist.fee = 0;
       exist.price = price;
       if ($("#ivNote").value.trim()) exist.note = $("#ivNote").value.trim();
+      persist(function(){ return window.TT.updateHolding(exist.id, exist, state.userId, state.unitIdByName); });
       closeSheets(); renderAll();
       toast("加碼好了！平均成本自動重算成 " + px(newCost, ccy, ccy === "TWD" ? 2 : 2) + " 🧮");
     } else {
@@ -1947,9 +2000,16 @@
                  qty:qty, cost:price, price:price, ccy:ccy, fee:fee,
                  buy:$("#ivDate").value || TODAY, unit:selUnit, note:$("#ivNote").value.trim() };
       state.holdings.push(nh);
+      nh._saving = persist(async function(){
+        nh.id = await window.TT.createHolding(nh, state.userId, state.unitIdByName);
+      });
       closeSheets(); renderAll();
       toast("記好了！之後{n}會幫妳盯著現價 👀", function(){
         state.holdings = state.holdings.filter(function(x){ return x.id !== nh.id; });
+        persist(async function(){
+          if (nh._saving) await nh._saving;
+          await window.TT.removeHolding(nh.id);
+        });
         renderAll(); toast("已復原 🙆");
       });
     }
@@ -2051,11 +2111,19 @@
     var fx = FX[h.ccy] || 1;
     var fee = h.mkt === "台股" ? Math.max(20, Math.round(q*p*TW_FEE)) + Math.round(q*p*0.003) : 0;
     var realized = (q*p - fee) * fx - q * h.cost * fx;
-    state.trades.push({ id:nid(), date:$("#slDate").value || TODAY, sym:h.sym, name:h.name, mkt:h.mkt,
-                        qty:q, sellPx:p, costPx:h.cost, ccy:h.ccy, realized:realized, unit:h.unit });
+    var tr = { id:nid(), date:$("#slDate").value || TODAY, sym:h.sym, name:h.name, mkt:h.mkt,
+               qty:q, sellPx:p, costPx:h.cost, ccy:h.ccy, realized:realized, unit:h.unit };
+    state.trades.push(tr);
     h.qty = +(h.qty - q).toFixed(8);
-    if (h.qty <= 0) state.holdings = state.holdings.filter(function(x){ return x.id !== h.id; });
+    var soldOut = h.qty <= 0;
+    if (soldOut) state.holdings = state.holdings.filter(function(x){ return x.id !== h.id; });
     state.cash += (q*p - fee) * fx;
+    persist(async function(){
+      if (h._saving) await h._saving;
+      tr.id = await window.TT.createTrade(tr, state.userId);
+      if (soldOut) await window.TT.removeHolding(h.id);
+      else await window.TT.updateHolding(h.id, h, state.userId, state.unitIdByName);
+    });
     closeSheets(); renderAll();
     toast((realized >= 0 ? "賣掉了！這批賺了 " : "賣掉了，這批賠了 ") + money(Math.abs(realized)) + " 💰");
   });
@@ -2123,10 +2191,135 @@
     $("#profileStat").innerHTML = '已經一起記帳 <b class="num">' + (daysBetween("2026-04-28", TODAY)) +
       '</b> 天，記下 <b class="num">' + state.tx.length + '</b> 筆 🧡';
   }
-  applyTheme();
-  renderAll();
-  renderUnitManage();
-  renderQuickList();
-  renderSubs();
+  /* ═══ 登入與真實資料 ═══
+     未登入時仍然顯示示範資料，這樣這個網址還是可以直接給別人看。
+     登入之後，示範資料整批換成她自己的，並且之後每次寫入都會同步回雲端。 */
+
+  function showGate(msg){
+    $("#gateErr").textContent = msg || "";
+    $("#gate").hidden = false;
+  }
+  function hideGate(){ $("#gate").hidden = true; }
+
+  /** 寫入雲端。示範模式不做事；失敗只提示，不讓畫面卡住。 */
+  function persist(run){
+    if (!state.live) return Promise.resolve();
+    return Promise.resolve().then(run).catch(function(err){
+      console.error(err);
+      toast("存到雲端時出了點問題 🙈 待會再試一次");
+    });
+  }
+
+  // 畫面先更新（她馬上看得到），再背景同步到雲端。
+  // 新增完要把本地的暫時 id 換成資料庫給的真 id，之後編輯／刪除才對得上。
+  function addTxLocal(t){
+    state.tx.push(t);
+    t._saving = persist(async function(){
+      var saved = await window.TT.createTx(t, state.userId);
+      t.id = saved.id;
+    });
+    return t;
+  }
+  function removeTxLocal(id){
+    var gone = state.tx.find(function(x){ return x.id === id; });
+    state.tx = state.tx.filter(function(x){ return x.id !== id; });
+    persist(async function(){
+      // 如果這筆才剛新增，要等它拿到真 id 再刪，不然會刪錯對象
+      if (gone && gone._saving) await gone._saving;
+      await window.TT.removeTx(gone ? gone.id : id);
+    });
+    return gone;
+  }
+  function restoreTxLocal(t){
+    if (!t) return;
+    delete t._saving;
+    addTxLocal(t);
+  }
+
+  async function loadRemote(){
+    var d = await window.TT.loadAll();
+    state.live = true;
+    state.userId = d.userId;
+    state.unitIdByName = d.unitIdByName;
+    state.tx = d.tx;
+    state.units = d.units;
+    state.holdings = d.holdings;
+    state.trades = d.trades;
+    state.divs = d.divs;
+    // 本地暫時 id 要跳到所有現有 id 之上，否則新記的一筆可能跟資料庫既有的
+    // 某筆撞號，導致編輯或刪除時改到錯的對象
+    var maxId = 0;
+    [d.tx, d.holdings, d.trades, d.divs].forEach(function(rows){
+      rows.forEach(function(r){ if (typeof r.id === "number" && r.id > maxId) maxId = r.id; });
+    });
+    uid = maxId + 1000000;
+    if (d.profile){
+      if (d.profile.month_budget) state.monthBudget = Number(d.profile.month_budget);
+      state.noPeek = !!d.profile.no_peek;
+      if (SKINS[d.profile.skin]) pref.skin = d.profile.skin;
+      if (["light","dark","auto"].indexOf(d.profile.appearance) >= 0) pref.mode = d.profile.appearance;
+    }
+    if (!state.units.length) state.units = [];
+    selUnit = state.units[0] || "";
+    $("#noPeekSw").classList.toggle("on", state.noPeek);
+    $("#noPeekSw").setAttribute("aria-checked", String(state.noPeek));
+    $("#logoutRow").hidden = false;
+    applyTheme();
+    renderAll();
+    renderUnitManage();
+    renderQuickList();
+    renderSubs();
+    hideGate();
+  }
+
+  $("#gateGo").addEventListener("click", async function(){
+    var btn = this;
+    btn.disabled = true;
+    $("#gateErr").textContent = "";
+    try {
+      await window.TT.login($("#gateEmail").value, $("#gatePass").value);
+      await loadRemote();
+      toast("歡迎回來 🧡");
+    } catch (err){
+      $("#gateErr").textContent = /Invalid login/i.test(err.message)
+        ? "信箱或密碼不對，再試一次 🙈" : err.message;
+    } finally {
+      btn.disabled = false;
+    }
+  });
+  $("#gatePass").addEventListener("keydown", function(e){ if (e.key === "Enter") $("#gateGo").click(); });
+  $("#gateDemo").addEventListener("click", function(){ hideGate(); });
+  $("#logoutRow").addEventListener("click", function(){
+    window.TT.logout();
+    location.reload();
+  });
+
+  async function boot(){
+    applyTheme();
+    renderAll();
+    renderUnitManage();
+    renderQuickList();
+    renderSubs();
+
+    var cfg;
+    try { cfg = await window.TT.config(); } catch (e){ cfg = null; }
+    if (!cfg || !cfg.configured){
+      // 還沒設定好資料庫，就安靜地停在示範模式
+      return;
+    }
+    window.TT.loadSession();
+    if (window.TT.isLoggedIn()){
+      try {
+        await loadRemote();
+        return;
+      } catch (err){
+        console.error(err);
+        showGate("登入過期了，請重新登入");
+        return;
+      }
+    }
+    showGate();
+  }
+  boot();
 })();
 </script>
