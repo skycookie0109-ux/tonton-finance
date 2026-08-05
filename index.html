@@ -635,6 +635,8 @@
         <div class="card" style="padding-top:6px;padding-bottom:6px">
           <button class="setrow" id="themeBtn"><span class="emo">🎨</span><span class="lbl">主題與外觀</span><span class="val" id="themeVal"></span><span class="chev">›</span></button>
           <button class="setrow" id="subsBtn"><span class="emo">🔁</span><span class="lbl">訂閱與固定支出</span><span class="val" id="subsVal"></span><span class="chev">›</span></button>
+          <button class="setrow" id="cashBtn"><span class="emo">💵</span><span class="lbl">現金餘額<span style="display:block;font-size:11px;color:var(--ink3);font-weight:600;margin-top:2px">銀行存款＋錢包裡的錢</span></span><span class="val num" id="cashVal"></span><span class="chev">›</span></button>
+          <button class="setrow" id="budgetBtn"><span class="emo">🌱</span><span class="lbl">每月預算</span><span class="val num" id="budgetVal"></span><span class="chev">›</span></button>
           <button class="setrow" id="quickBtn"><span class="emo">⚡</span><span class="lbl">常用快捷</span><span class="val" id="quickVal"></span><span class="chev">›</span></button>
           <button class="setrow" id="unitManageBtn"><span class="emo">🏦</span><span class="lbl">存放單位管理</span><span class="val" id="unitCount"></span><span class="chev">›</span></button>
           <div class="setrow"><span class="emo">🍵</span><span class="lbl">不看盤模式<span style="display:block;font-size:11px;color:var(--ink3);font-weight:600;margin-top:2px">平常不推播漲跌，只在週報說一次</span></span><button class="sw" id="noPeekSw" role="switch" aria-label="不看盤模式" aria-checked="false"></button></div>
@@ -818,6 +820,18 @@
           <input id="qAmt" inputmode="decimal" placeholder="金額" style="max-width:88px">
           <button id="qAdd">加入</button>
         </div>
+      </div>
+    </div>
+
+    <!-- 設定一個數字（現金餘額／每月預算共用） -->
+    <div class="sheet" id="sheet-num" role="dialog" aria-label="設定">
+      <div class="grab"></div>
+      <h3 id="numTitle">設定</h3>
+      <div class="inner frm">
+        <p class="hintline" id="numHint" style="margin-top:2px"></p>
+        <label for="numInput">金額（NT$）</label>
+        <input id="numInput" inputmode="decimal" placeholder="0">
+        <button class="save" id="numSave">存起來 🧡</button>
       </div>
     </div>
 
@@ -1271,12 +1285,16 @@
 
     var spent = monthSpent(monthOf(TODAY));
     $("#monthSpent").textContent = money(spent);
-    $("#budgetTotal").textContent = "/ " + money(state.monthBudget);
-    $("#budgetLeft").textContent = "還可以花 " + money(state.monthBudget - spent);
-    var p = Math.min(100, spent / state.monthBudget * 100);
+    var hasBudget = state.monthBudget > 0;
+    $("#budgetTotal").textContent = hasBudget ? "/ " + money(state.monthBudget) : "";
+    $("#budgetLeft").textContent = hasBudget
+      ? "還可以花 " + money(state.monthBudget - spent) : "還沒設定預算";
+    var p = hasBudget ? Math.min(100, spent / state.monthBudget * 100) : 0;
     $("#budgetBar").style.width = p.toFixed(1) + "%";
-    $("#budgetTip").textContent =
-      p < 60 ? "花得很剛好，照這個節奏月底還能多存一點 ✨"
+    $("#budgetBar").parentNode.hidden = !hasBudget;
+    $("#budgetTip").textContent = !hasBudget
+      ? "想設個每月預算嗎？到「更多 → 每月預算」設定，我就會幫妳留意 🌱"
+      : p < 60 ? "花得很剛好，照這個節奏月底還能多存一點 ✨"
       : p < 90 ? "稍微注意一下，不過偶爾犒賞自己也沒關係 ☕"
       : "這個月辛苦了，下個月" + N() + "陪妳重新開始 🧡";
 
@@ -1333,7 +1351,8 @@
     });
     var e = document.createElement("button");
     e.className = "qchip editq";
-    e.textContent = "⚙️ 編輯";
+    // 一個都沒有的時候，這顆按鈕要自己說明它是幹嘛的
+    e.textContent = state.quick.length ? "⚙️ 編輯" : "＋ 設定常用的花費，之後一點就記完";
     e.addEventListener("click", function(){ renderQuickList(); openSheet("#sheet-quick"); });
     box.appendChild(e);
   }
@@ -1346,6 +1365,45 @@
       renderHome();
       toast("已復原 🙆");
     });
+  }
+
+  /* ═══ 現金餘額與每月預算 ═══
+     這兩個是她自己的數字，不該由我預設。沒設定就顯示「還沒設定」，
+     絕不填一個看起來合理但其實是猜的值。 */
+  var numTarget = null;
+  function openNumSheet(kind){
+    numTarget = kind;
+    if (kind === "cash"){
+      $("#numTitle").textContent = "現金餘額 💵";
+      $("#numHint").textContent = "銀行存款加上錢包裡的現金，大概多少就好。這個數字會算進總資產。";
+      $("#numInput").value = state.cash > 0 ? state.cash : "";
+    } else {
+      $("#numTitle").textContent = "每月預算 🌱";
+      $("#numHint").textContent = "一個月大概想花多少？豚豚會用它提醒妳，不會逼妳。留白就是不設限。";
+      $("#numInput").value = state.monthBudget > 0 ? state.monthBudget : "";
+    }
+    openSheet("#sheet-num");
+    setTimeout(function(){ $("#numInput").focus(); }, 60);
+  }
+  $("#cashBtn").addEventListener("click", function(){ openNumSheet("cash"); });
+  $("#budgetBtn").addEventListener("click", function(){ openNumSheet("budget"); });
+  $("#numInput").addEventListener("keydown", function(e){ if (e.key === "Enter") $("#numSave").click(); });
+  $("#numSave").addEventListener("click", function(){
+    var v = parseFloat($("#numInput").value);
+    if (!(v >= 0)) v = 0;
+    if (numTarget === "cash"){
+      state.cash = v;
+      persist(function(){ return window.TT.updateProfile(state.userId, { cash_balance: v }); });
+    } else {
+      state.monthBudget = v;
+      persist(function(){ return window.TT.updateProfile(state.userId, { month_budget: v }); });
+    }
+    closeSheets(); renderAll(); renderSettings();
+    toast("記好了 🧡");
+  });
+  function renderSettings(){
+    $("#cashVal").textContent = state.cash > 0 ? money(state.cash) : "還沒設定";
+    $("#budgetVal").textContent = state.monthBudget > 0 ? money(state.monthBudget) : "還沒設定";
   }
 
   /* ═══ 目標 ═══ */
@@ -2299,8 +2357,15 @@
     renderHome();
     renderInvest();
     renderGoals();
-    $("#profileStat").innerHTML = '已經一起記帳 <b class="num">' + (daysBetween("2026-04-28", TODAY)) +
-      '</b> 天，記下 <b class="num">' + state.tx.length + '</b> 筆 🧡';
+    renderSettings();
+    // 從真正的第一筆紀錄算起，不要用寫死的起始日假裝已經陪了多久
+    var firstDate = state.tx.reduce(function(min, t){
+      return (!min || t.date < min) ? t.date : min;
+    }, null);
+    $("#profileStat").innerHTML = firstDate
+      ? '已經一起記帳 <b class="num">' + (daysBetween(firstDate, TODAY) + 1) +
+        '</b> 天，記下 <b class="num">' + state.tx.length + '</b> 筆 🧡'
+      : '還沒有紀錄，從今天開始吧 🌱';
   }
   /* ═══ 登入與真實資料 ═══
      未登入時仍然顯示示範資料，這樣這個網址還是可以直接給別人看。
@@ -2375,7 +2440,9 @@
     });
     uid = maxId + 1000000;
     if (d.profile){
-      if (d.profile.month_budget) state.monthBudget = Number(d.profile.month_budget);
+      // 一定要無條件覆蓋。用 if (…) 判斷的話，預算 0（＝還沒設定）是 falsy，
+      // 會讓示範用的 45000 留下來，看起來就像她設過一個從沒設過的預算
+      state.monthBudget = Number(d.profile.month_budget || 0);
       state.noPeek = !!d.profile.no_peek;
       if (SKINS[d.profile.skin]) pref.skin = d.profile.skin;
       if (["light","dark","auto"].indexOf(d.profile.appearance) >= 0) pref.mode = d.profile.appearance;
