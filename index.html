@@ -368,6 +368,13 @@
   .urow .ub{width:34px;height:34px;border-radius:11px;background:var(--card2);display:grid;place-items:center;font-size:14px;flex:none}
   .urow input{flex:1;background:var(--card2);border:0;border-radius:10px;padding:8px 11px;font-size:14px;min-width:0}
 
+  /* 全部重新開始 */
+  .wipebox{background:var(--up-bg);border-radius:15px;padding:14px 16px;margin-top:8px}
+  .wipebox b{display:block;font-size:13px;color:var(--up);margin-bottom:7px}
+  .wipebox ul{margin:0;padding-left:19px}
+  .wipebox li{font-size:14px;line-height:1.85;color:var(--ink)}
+  .wipebox li.none{color:var(--ink3)}
+
   /* 登入畫面 */
   .gate{position:fixed;inset:0;z-index:60;display:grid;place-items:center;padding:22px;
     background:radial-gradient(700px 500px at 80% -10%, var(--stage-b), transparent 70%), var(--stage-a)}
@@ -647,6 +654,7 @@
           <button class="setrow" data-toast="打開 App 用 Face ID 保護小金庫"><span class="emo">🔐</span><span class="lbl">Face ID 鎖定</span><span class="val">開啟</span><span class="chev">›</span></button>
           <button class="setrow" data-toast="隨時可以把資料帶走，都是妳的"><span class="emo">📤</span><span class="lbl">匯出 CSV</span><span class="val"></span><span class="chev">›</span></button>
           <button class="setrow" id="logoutRow" hidden><span class="emo">👋</span><span class="lbl">登出</span><span class="val"></span><span class="chev">›</span></button>
+          <button class="setrow" id="resetRow" hidden><span class="emo">🧹</span><span class="lbl" style="color:var(--up)">全部重新開始<span style="display:block;font-size:11px;color:var(--ink3);font-weight:600;margin-top:2px">清空所有紀錄，回到剛註冊的樣子</span></span><span class="chev">›</span></button>
         </div>
         <p class="foot" data-tpl="{n}記帳 · 介面原型 v0.4 · 資料皆為示範"></p>
       </section>
@@ -820,6 +828,29 @@
           <input id="qAmt" inputmode="decimal" placeholder="金額" style="max-width:88px">
           <button id="qAdd">加入</button>
         </div>
+      </div>
+    </div>
+
+    <!-- 全部重新開始（雙重確認：要打字，還要按兩次） -->
+    <div class="sheet" id="sheet-reset" role="dialog" aria-label="全部重新開始">
+      <div class="grab"></div>
+      <h3>全部重新開始 🧹</h3>
+      <div class="inner">
+        <div class="wipebox">
+          <b>這些會被永久刪除</b>
+          <ul id="wipeList"></ul>
+        </div>
+        <p class="hintline" style="text-align:left;line-height:1.7">
+          會保留：妳的帳號本身、以及 LINE 綁定——重新開始之後，{n}還是認得妳，不用再綁一次。<br>
+          <b style="color:var(--up)">刪掉就救不回來了，我沒有備份。</b>
+        </p>
+        <label for="wipeConfirm" style="display:block;font-size:12px;font-weight:700;color:var(--ink2);margin:14px 2px 5px">
+          確定的話，請在下面打上「<b style="color:var(--up)">重新開始</b>」
+        </label>
+        <input id="wipeConfirm" placeholder="重新開始" autocomplete="off"
+               style="width:100%;background:var(--card2);border:0;border-radius:13px;padding:12px 14px;font-size:15px">
+        <button class="danger" id="wipeGo" disabled style="margin-top:14px;padding:14px;font-size:15px">全部刪除</button>
+        <button class="gate-demo" id="wipeCancel" style="width:100%;margin-top:4px">算了，先不要 ›</button>
       </div>
     </div>
 
@@ -1366,6 +1397,85 @@
       toast("已復原 🙆");
     });
   }
+
+  /* ═══ 全部重新開始 ═══
+     刪掉之後救不回來，所以刻意設了兩道關卡：
+       1. 要照著打「重新開始」四個字，按鈕才會解鎖——防手滑
+       2. 解鎖後第一次按只是變成「真的確定？」，第二次才真的執行——防衝動
+     另外先把「會刪掉什麼」逐項列出來，讓她知道自己在放棄什麼。 */
+  var WIPE_PHRASE = "重新開始";
+  var wipeArmed = false;
+
+  function renderWipeSheet(){
+    var items = [
+      ["筆記帳紀錄", state.tx.length],
+      ["檔持股", state.holdings.length],
+      ["筆交易紀錄", state.trades.length],
+      ["筆配息紀錄", state.divs.length],
+      ["個儲蓄目標", state.goals.length],
+      ["個常用快捷", state.quick.length],
+      ["筆訂閱設定", state.subs.length],
+      ["個存放單位", state.units.length]
+    ].filter(function(x){ return x[1] > 0; });
+
+    var ul = $("#wipeList"); ul.innerHTML = "";
+    if (!items.length){
+      ul.innerHTML = '<li class="none">目前沒有任何資料，其實不用清空 🐾</li>';
+    }
+    items.forEach(function(it){
+      var li = document.createElement("li");
+      li.textContent = it[1] + " " + it[0];
+      ul.appendChild(li);
+    });
+    var li2 = document.createElement("li");
+    li2.textContent = "現金餘額與每月預算會歸零";
+    ul.appendChild(li2);
+
+    $("#wipeConfirm").value = "";
+    wipeArmed = false;
+    $("#wipeGo").disabled = true;
+    $("#wipeGo").textContent = "全部刪除";
+  }
+
+  $("#resetRow").addEventListener("click", function(){
+    renderWipeSheet();
+    openSheet("#sheet-reset");
+  });
+  $("#wipeCancel").addEventListener("click", closeSheets);
+  $("#wipeConfirm").addEventListener("input", function(){
+    var ok = this.value.trim() === WIPE_PHRASE;
+    $("#wipeGo").disabled = !ok;
+    if (!ok){ wipeArmed = false; $("#wipeGo").textContent = "全部刪除"; }
+  });
+  $("#wipeGo").addEventListener("click", async function(){
+    if ($("#wipeConfirm").value.trim() !== WIPE_PHRASE) return;
+    // 第一次按只是上膛，還不執行
+    if (!wipeArmed){
+      wipeArmed = true;
+      this.textContent = "真的確定？再按一次就刪除";
+      return;
+    }
+    var btn = this;
+    btn.disabled = true;
+    btn.textContent = "清空中…";
+    try {
+      if (state.live) await window.TT.wipeAll(state.userId);
+      state.tx = []; state.holdings = []; state.trades = []; state.divs = [];
+      state.goals = []; state.quick = []; state.subs = []; state.units = [];
+      state.snapshots = []; state.unitIdByName = {};
+      state.cash = 0; state.monthBudget = 0;
+      selUnit = "";
+      closeSheets();
+      renderAll(); renderUnitManage(); renderQuickList(); renderSubs();
+      toast("都清空了，我們重新開始 🌱");
+    } catch (err){
+      console.error(err);
+      btn.disabled = false;
+      btn.textContent = "全部刪除";
+      wipeArmed = false;
+      toast("清空的時候出了點問題 🙈 再試一次");
+    }
+  });
 
   /* ═══ 現金餘額與每月預算 ═══
      這兩個是她自己的數字，不該由我預設。沒設定就顯示「還沒設定」，
@@ -2452,6 +2562,7 @@
     $("#noPeekSw").classList.toggle("on", state.noPeek);
     $("#noPeekSw").setAttribute("aria-checked", String(state.noPeek));
     $("#logoutRow").hidden = false;
+    $("#resetRow").hidden = false;
     applyTheme();
     renderAll();
     renderUnitManage();

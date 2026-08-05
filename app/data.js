@@ -325,6 +325,34 @@
     return rows[0].id;
   }
 
+  /**
+   * 把這個帳號的所有資料刪光，回到剛註冊的狀態。
+   *
+   * 刻意不動兩樣東西：帳號本身（不然她就登不進來了），
+   * 以及 LINE 綁定（重新開始之後豚豚還是認得她，不用再綁一次）。
+   *
+   * 每一句都帶 user_id 條件，加上 RLS 也會擋，所以就算這裡寫錯，
+   * 也不可能刪到別人的資料。
+   */
+  async function wipeAll(userId) {
+    // 先刪引用別人的，再刪被引用的，避免外鍵擋住
+    const tables = [
+      "transactions", "trades", "dividends", "holdings",
+      "goals", "quick_actions", "subscriptions", "asset_snapshots", "units",
+    ];
+    for (const table of tables) {
+      await rest(`${table}?user_id=eq.${userId}`, {
+        method: "DELETE",
+        prefer: "return=minimal",
+      });
+    }
+    await rest(`profiles?id=eq.${userId}`, {
+      method: "PATCH",
+      body: { cash_balance: 0, month_budget: 0 },
+      prefer: "return=minimal",
+    });
+  }
+
   function updateProfile(userId, patch) {
     return rest("profiles?id=eq." + userId, { method: "PATCH", body: patch, prefer: "return=minimal" });
   }
@@ -373,7 +401,7 @@
     createTx: createTx, updateTx: updateTx, removeTx: removeTx,
     createHolding: createHolding, updateHolding: updateHolding, removeHolding: removeHolding,
     createUnit: createUnit, renameUnit: renameUnit, removeUnit: removeUnit,
-    createTrade: createTrade, updateProfile: updateProfile,
+    createTrade: createTrade, updateProfile: updateProfile, wipeAll: wipeAll,
     get userId() { return session && session.user_id; },
   };
 })();
