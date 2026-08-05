@@ -649,7 +649,7 @@
           <div class="setrow"><span class="emo">🍵</span><span class="lbl">不看盤模式<span style="display:block;font-size:11px;color:var(--ink3);font-weight:600;margin-top:2px">平常不推播漲跌，只在週報說一次</span></span><button class="sw" id="noPeekSw" role="switch" aria-label="不看盤模式" aria-checked="false"></button></div>
           <button class="setrow" data-toast="正式版可以改提醒時間～"><span class="emo">⏰</span><span class="lbl">每日記帳提醒</span><span class="val">21:00</span><span class="chev">›</span></button>
           <button class="setrow" data-toast="也可以切成國際習慣的綠漲紅跌"><span class="emo">📊</span><span class="lbl">漲跌顏色</span><span class="val">紅漲綠跌（台灣）</span><span class="chev">›</span></button>
-          <button class="setrow" data-toast="匯率每天自動更新，不用自己查"><span class="emo">💱</span><span class="lbl">美元匯率</span><span class="val num">31.20 · 自動</span><span class="chev">›</span></button>
+          <button class="setrow" id="fxRow" data-toast="匯率每天自動更新，不用自己查"><span class="emo">💱</span><span class="lbl">美元匯率</span><span class="val num">尚未更新</span><span class="chev">›</span></button>
           <button class="setrow" data-toast="手機、iPad、Mac 都會自動同步"><span class="emo">☁️</span><span class="lbl">跨裝置同步</span><span class="val">已同步</span><span class="chev">›</span></button>
           <button class="setrow" data-toast="打開 App 用 Face ID 保護小金庫"><span class="emo">🔐</span><span class="lbl">Face ID 鎖定</span><span class="val">開啟</span><span class="chev">›</span></button>
           <button class="setrow" data-toast="隨時可以把資料帶走，都是妳的"><span class="emo">📤</span><span class="lbl">匯出 CSV</span><span class="val"></span><span class="chev">›</span></button>
@@ -1673,7 +1673,12 @@
     $("#kpiDiv").textContent = money(T.div);
     $("#kpiReal").textContent = (T.real >= 0 ? "+" : "") + money(T.real);
     $("#kpiReal").style.color = T.real >= 0 ? "var(--up)" : "var(--down)";
-    $("#invWithDiv").textContent = "含息報酬率 " + pct(T.rAll) + "　（配息也算進去才是真的賺多少 🌰）";
+    // 沒抓到報價的標的，現價等於成本價，報酬率會是 0%——要講出來，
+    // 不然看起來像「真的沒賺沒賠」
+    var noQuote = state.live ? state.holdings.filter(function(h){ return h.hasQuote === false; }) : [];
+    $("#invWithDiv").textContent = noQuote.length
+      ? noQuote.map(function(h){ return h.sym; }).join("、") + " 還沒抓到報價，先用成本價計算 🌱"
+      : "含息報酬率 " + pct(T.rAll) + "　（配息也算進去才是真的賺多少 🌰）";
 
     // 依市場：三色圓餅（固定配色）
     var groups = { "台股":0, "美股":0, "Crypto":0 };
@@ -2542,6 +2547,11 @@
     state.goals = d.goals;
     state.snapshots = d.snapshots;
     state.cash = d.profile ? Number(d.profile.cash_balance || 0) : 0;
+    // 匯率也改用排程抓回來的，不再寫死 31.2
+    if (d.usdTwd > 0){
+      FX.USD = d.usdTwd;
+      $("#fxRow").querySelector(".val").textContent = d.usdTwd.toFixed(2) + " · 每日更新";
+    }
     // 本地暫時 id 要跳到所有現有 id 之上，否則新記的一筆可能跟資料庫既有的
     // 某筆撞號，導致編輯或刪除時改到錯的對象
     var maxId = 0;

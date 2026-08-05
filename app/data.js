@@ -181,12 +181,16 @@
     };
   }
 
-  function holdingFromDb(r, unitNameById) {
+  function holdingFromDb(r, unitNameById, priceByKey) {
+    // 有行情就用行情，還沒抓到就退回成本價（報酬率會顯示 0%，
+    // 至少不會編一個不存在的漲跌出來）
+    const quote = priceByKey[r.market + ":" + r.symbol];
     return {
       id: r.id, mkt: MARKET_TO_UI[r.market] || "台股", sym: r.symbol,
       name: r.name || r.symbol, qty: Number(r.quantity), cost: Number(r.avg_cost),
-      // 現價還沒接行情來源，先用成本價；里程碑 3 的排程會每天更新
-      price: Number(r.avg_cost), ccy: r.currency || "TWD",
+      price: quote != null ? quote : Number(r.avg_cost),
+      hasQuote: quote != null,
+      ccy: r.currency || "TWD",
       fee: Number(r.fee_total || 0), buy: r.bought_on,
       unit: unitNameById[r.unit_id] || "", note: r.why_note || "",
     };
@@ -216,6 +220,8 @@
       rest("subscriptions?select=*&active=eq.true&order=day_of_month.asc"),
       rest("goals?select=*&order=id.asc"),
       rest("asset_snapshots?select=taken_on,total&order=taken_on.asc&limit=400"),
+      rest("price_cache?select=market,symbol,price"),
+      rest("fx_cache?select=pair,rate"),
     ]);
     var profile = results[0][0] || null;
     var unitRows = results[2];
@@ -226,6 +232,15 @@
       unitIdByName[u.name] = u.id;
     });
 
+    var priceByKey = {};
+    (results[10] || []).forEach(function (p) {
+      priceByKey[p.market + ":" + p.symbol] = Number(p.price);
+    });
+    var usdTwd = null;
+    (results[11] || []).forEach(function (f) {
+      if (f.pair === "USDTWD") usdTwd = Number(f.rate);
+    });
+
     return {
       userId: userId,
       profile: profile,
@@ -234,7 +249,8 @@
       units: unitRows.map(function (u) { return u.name; }),
       unitNameById: unitNameById,
       unitIdByName: unitIdByName,
-      holdings: results[3].map(function (r) { return holdingFromDb(r, unitNameById); }),
+      usdTwd: usdTwd,
+      holdings: results[3].map(function (r) { return holdingFromDb(r, unitNameById, priceByKey); }),
       trades: results[4].map(function (r) {
         return {
           id: r.id, date: r.traded_on, sym: r.symbol, name: r.name || r.symbol,
