@@ -13,8 +13,13 @@ import { parseSentence, summarize, todayInTaipei } from "../_lib/parse.js";
 
 const LINE_REPLY_URL = "https://api.line.me/v2/bot/message/reply";
 
-const SUPABASE_URL =
-  process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
+// 結尾的斜線要拿掉。Supabase 後台複製出來的網址常常帶著它，
+// 接上 /rest/v1/... 就變成雙斜線，PostgREST 會回 PGRST125 說路徑無效。
+const SUPABASE_URL = (
+  process.env.SUPABASE_URL ||
+  process.env.NEXT_PUBLIC_SUPABASE_URL ||
+  ""
+).replace(/\/+$/, "");
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const CHANNEL_SECRET = process.env.LINE_CHANNEL_SECRET;
 const CHANNEL_TOKEN = process.env.LINE_CHANNEL_ACCESS_TOKEN;
@@ -65,7 +70,9 @@ async function findProfile(lineUserId) {
     `?line_user_id=eq.${encodeURIComponent(lineUserId)}&select=id,display_name&limit=1`;
   const res = await fetch(url, { headers: supabaseHeaders() });
   if (!res.ok) {
-    console.error("profile lookup failed", res.status, await res.text());
+    // 把實際打出去的網址一起印出來（金鑰在 header 裡，不會外流），
+    // 不然只看到 404 很難分辨是路徑錯還是資料不存在
+    console.error("profile lookup failed", res.status, url, await res.text());
     return null;
   }
   const rows = await res.json();
